@@ -1,9 +1,13 @@
 #!/usr/bin/env node
 
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
+const chalk = require('chalk');
+const Table = require('cli-table3');
+const inquirer = require('inquirer');
 
-const TODOS_FILE = path.join(process.cwd(), 'todos.json');
+const TODOS_FILE = path.join(os.homedir(), 'todos.json');
 
 /**
  * Carga las tareas desde todos.json.
@@ -34,103 +38,133 @@ function saveTodos(todos) {
 }
 
 /**
- * Añade una nueva tarea.
- * @param {string} taskText
+ * Muestra la lista de tareas actual.
  */
-function addTodo(taskText) {
-    if (!taskText) {
-        console.log("No se puede añadir una tarea vacía.");
+function displayTodos() {
+    const todos = loadTodos();
+    console.clear();
+    console.log(chalk.cyan.bold('--- TAREAS PENDIENTES ---'));
+
+    if (todos.length === 0) {
+        console.log(chalk.yellow(`
+No hay tareas pendientes. ¡Añade una!
+`));
         return;
     }
-    const todos = loadTodos();
-    const newTodo = { text: taskText, completed: false };
-    todos.push(newTodo);
-    saveTodos(todos);
-    console.log(`Tarea añadida: "${taskText}"`);
+
+    const table = new Table({
+        head: [chalk.cyan.bold('Estado'), chalk.cyan.bold('Tarea')],
+        colWidths: [10, 60],
+        style: { 'head': [], 'border': ['grey'] }
+    });
+
+    todos.forEach((todo) => {
+        const status = todo.completed ? chalk.green('[x]') : chalk.red('[ ]');
+        const taskText = todo.completed ? chalk.gray.strikethrough(todo.text) : chalk.white(todo.text);
+        table.push([status, taskText]);
+    });
+
+    console.log(table.toString());
 }
 
 /**
- * Lista todas las tareas.
+ * Muestra el menú principal y gestiona las acciones del usuario.
  */
-function listTodos() {
+async function mainMenu() {
+    displayTodos();
+
+    const todos = loadTodos();
+    const choices = [
+        { name: 'Añadir nueva tarea', value: 'add' },
+        new inquirer.Separator(),
+        ...todos.map((todo, index) => ({
+            name: `${todo.completed ? chalk.green('[x]') : chalk.red('[ ]')} ${todo.completed ? chalk.gray.strikethrough(todo.text) : todo.text}`,
+            value: { action: 'toggle', index }
+        })),
+        new inquirer.Separator(),
+        { name: 'Eliminar tarea', value: 'delete' },
+        { name: 'Salir', value: 'exit' }
+    ];
+
+    const { selection } = await inquirer.prompt([
+        {
+            type: 'list',
+            name: 'selection',
+            message: '¿Qué quieres hacer?',
+            choices: choices,
+            pageSize: 15
+        }
+    ]);
+
+    if (typeof selection === 'object' && selection.action === 'toggle') {
+        todos[selection.index].completed = !todos[selection.index].completed;
+        saveTodos(todos);
+        mainMenu();
+    } else {
+        switch (selection) {
+            case 'add':
+                await promptAddTodo();
+                mainMenu();
+                break;
+            case 'delete':
+                await promptDeleteTodo();
+                mainMenu();
+                break;
+            case 'exit':
+                console.log(chalk.blue("¡Hasta luego!"));
+                process.exit(0);
+                break;
+        }
+    }
+}
+
+/**
+ * Pide al usuario el texto de la nueva tarea y la añade.
+ */
+async function promptAddTodo() {
+    const { taskText } = await inquirer.prompt([
+        {
+            type: 'input',
+            name: 'taskText',
+            message: 'Escribe la nueva tarea:'
+        }
+    ]);
+    if (taskText) {
+        const todos = loadTodos();
+        todos.push({ text: taskText, completed: false });
+        saveTodos(todos);
+    }
+}
+
+/**
+ * Muestra un menú para seleccionar qué tarea eliminar.
+ */
+async function promptDeleteTodo() {
     const todos = loadTodos();
     if (todos.length === 0) {
-        console.log("No hay tareas pendientes. ¡Añade una!");
+        console.log(chalk.yellow("No hay tareas para eliminar."));
+        await new Promise(resolve => setTimeout(resolve, 1500)); // Pausa para leer el mensaje
         return;
     }
-    console.log("--- Lista de Tareas ---");
-    todos.forEach((todo, index) => {
-        const status = todo.completed ? '[x]' : '[ ]';
-        console.log(`${index + 1}. ${status} ${todo.text}`);
-    });
-    console.log("-----------------------");
-}
 
-/**
- * Marca una tarea como completada.
- * @param {number} index - El índice 1-based de la tarea.
- */
-function completeTodo(index) {
-    const todos = loadTodos();
-    if (isNaN(index) || index <= 0 || index > todos.length) {
-        console.log("Índice inválido. Por favor, proporciona un número de la lista.");
-        return;
+    const { todoIndex } = await inquirer.prompt([
+        {
+            type: 'list',
+            name: 'todoIndex',
+            message: '¿Qué tarea quieres eliminar?',
+            choices: [
+                ...todos.map((todo, index) => ({ name: todo.text, value: index })),
+                new inquirer.Separator(),
+                { name: 'Cancelar', value: -1 }
+            ]
+        }
+    ]);
+
+    if (todoIndex !== -1) {
+        todos.splice(todoIndex, 1);
+        saveTodos(todos);
     }
-    todos[index - 1].completed = true;
-    saveTodos(todos);
-    console.log(`Tarea "${todos[index - 1].text}" marcada como completada.`);
 }
 
-/**
- * Elimina una tarea.
- * @param {number} index - El índice 1-based de la tarea.
- */
-function deleteTodo(index) {
-    const todos = loadTodos();
-    if (isNaN(index) || index <= 0 || index > todos.length) {
-        console.log("Índice inválido. Por favor, proporciona un número de la lista.");
-        return;
-    }
-    const deletedTodo = todos.splice(index - 1, 1);
-    saveTodos(todos);
-    console.log(`Tarea "${deletedTodo[0].text}" eliminada.`);
-}
-
-/**
- * Muestra el menú de ayuda.
- */
-function showHelp() {
-    console.log(`
-Uso: node index.js <comando> [argumentos]
-
-Comandos:
-  add <texto>    Añade una nueva tarea.
-  list           Muestra la lista de tareas.
-  done <índice>  Marca una tarea como completada.
-  delete <índice>  Elimina una tarea.
-  help           Muestra esta ayuda.
-    `);
-}
-
-// --- Lógica Principal ---
-const [,, command, ...args] = process.argv;
-const argument = args.join(' ');
-
-switch (command) {
-    case 'add':
-        addTodo(argument);
-        break;
-    case 'list':
-        listTodos();
-        break;
-    case 'done':
-        completeTodo(parseInt(argument, 10));
-        break;
-    case 'delete':
-        deleteTodo(parseInt(argument, 10));
-        break;
-    case 'help':
-    default:
-        showHelp();
-        break;
-}
+// Iniciar la aplicación
+mainMenu();

@@ -1,13 +1,25 @@
 {
   "name": "todo-cli",
   "version": "1.0.0",
-  "description": "",
+  "description": "Una simple pero elegante CLI de tareas pendientes.",
   "main": "index.js",
+  "bin": {
+    "todo": "./index.js"
+  },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": [
+    "todo",
+    "cli",
+    "tasks"
+  ],
+  "author": "Gemini",
   "license": "ISC",
+  "dependencies": {
+    "chalk": "^4.1.2",
+    "cli-table3": "^0.6.3",
+    "inquirer": "^8.2.4"
+  },
   "type": "commonjs"
 }
