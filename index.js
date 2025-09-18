@@ -139,19 +139,21 @@ async function mainMenu() {
     console.log(chalk.cyan.bold('--- GESTOR DE TAREAS ---'));
 
     const todos = loadTodos();
+    const originalTodosCount = todos.length;
+    todos.reverse(); // Reverse the array for display
 
     const choices = [
-        { name: chalk.blue.bold('AÑADIR NUEVA TAREA'), value: 'add' },
+        { name: chalk.greenBright.bold('1. ') + chalk.blue.bold('AÑADIR NUEVA TAREA'), value: 'add' },
         new inquirer.Separator('─'.repeat(70)),
     ];
 
     if (todos.length > 0) {
-        todos.forEach((todo, index) => {
-            const status = todo.completed ? chalk.green('[✔]') : chalk.yellow('[ ]');
-            const taskText = todo.completed ? chalk.gray.strikethrough(todo.text) : chalk.white(todo.text);
+        todos.forEach((todo, index) => { // index is from the reversed array
+            const status = chalk.magenta(todo.completed ? '[✔]' : '[ ]');
+            const taskText = todo.completed ? chalk.gray.strikethrough(todo.text) : chalk.yellow(todo.text);
             choices.push({
-                name: `${chalk.cyan.bold((index + 1) + '.')} ${status} ${taskText}`,
-                value: { action: 'select_task', index: index }
+                name: `${chalk.greenBright.bold((index + 2) + '.')} ${status} ${taskText}`,
+                value: { action: 'select_task', index: (originalTodosCount - 1) - index }
             });
         });
     } else {
