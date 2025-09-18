@@ -4,7 +4,6 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const chalk = require('chalk');
-const Table = require('cli-table3');
 const inquirer = require('inquirer');
 
 const TODOS_FILE = path.join(os.homedir(), 'todos.json');
@@ -38,87 +37,6 @@ function saveTodos(todos) {
 }
 
 /**
- * Muestra la lista de tareas actual.
- */
-function displayTodos() {
-    const todos = loadTodos();
-    console.clear();
-    console.log(chalk.cyan.bold('--- TAREAS PENDIENTES ---'));
-
-    if (todos.length === 0) {
-        console.log(chalk.yellow(`
-No hay tareas pendientes. ¡Añade una!
-`));
-        return;
-    }
-
-    const table = new Table({
-        head: [chalk.cyan.bold('Estado'), chalk.cyan.bold('Tarea')],
-        colWidths: [10, 60],
-        style: { 'head': [], 'border': ['grey'] }
-    });
-
-    todos.forEach((todo) => {
-        const status = todo.completed ? chalk.green('[x]') : chalk.red('[ ]');
-        const taskText = todo.completed ? chalk.gray.strikethrough(todo.text) : chalk.white(todo.text);
-        table.push([status, taskText]);
-    });
-
-    console.log(table.toString());
-}
-
-/**
- * Muestra el menú principal y gestiona las acciones del usuario.
- */
-async function mainMenu() {
-    displayTodos();
-
-    const todos = loadTodos();
-    const choices = [
-        { name: 'Añadir nueva tarea', value: 'add' },
-        new inquirer.Separator(),
-        ...todos.map((todo, index) => ({
-            name: `${todo.completed ? chalk.green('[x]') : chalk.red('[ ]')} ${todo.completed ? chalk.gray.strikethrough(todo.text) : todo.text}`,
-            value: { action: 'toggle', index }
-        })),
-        new inquirer.Separator(),
-        { name: 'Eliminar tarea', value: 'delete' },
-        { name: 'Salir', value: 'exit' }
-    ];
-
-    const { selection } = await inquirer.prompt([
-        {
-            type: 'list',
-            name: 'selection',
-            message: '¿Qué quieres hacer?',
-            choices: choices,
-            pageSize: 15
-        }
-    ]);
-
-    if (typeof selection === 'object' && selection.action === 'toggle') {
-        todos[selection.index].completed = !todos[selection.index].completed;
-        saveTodos(todos);
-        mainMenu();
-    } else {
-        switch (selection) {
-            case 'add':
-                await promptAddTodo();
-                mainMenu();
-                break;
-            case 'delete':
-                await promptDeleteTodo();
-                mainMenu();
-                break;
-            case 'exit':
-                console.log(chalk.blue("¡Hasta luego!"));
-                process.exit(0);
-                break;
-        }
-    }
-}
-
-/**
  * Pide al usuario el texto de la nueva tarea y la añade.
  */
 async function promptAddTodo() {
@@ -129,7 +47,7 @@ async function promptAddTodo() {
             message: 'Escribe la nueva tarea:'
         }
     ]);
-    if (taskText) {
+    if (taskText && taskText.trim() !== '') {
         const todos = loadTodos();
         todos.push({ text: taskText, completed: false });
         saveTodos(todos);
@@ -137,32 +55,134 @@ async function promptAddTodo() {
 }
 
 /**
- * Muestra un menú para seleccionar qué tarea eliminar.
+ * Pide al usuario que edite el texto de una tarea existente.
+ * @param {number} index
  */
-async function promptDeleteTodo() {
+async function promptEditTodo(index) {
     const todos = loadTodos();
-    if (todos.length === 0) {
-        console.log(chalk.yellow("No hay tareas para eliminar."));
-        await new Promise(resolve => setTimeout(resolve, 1500)); // Pausa para leer el mensaje
-        return;
-    }
+    const todo = todos[index];
 
-    const { todoIndex } = await inquirer.prompt([
+    const { newText } = await inquirer.prompt([
+        {
+            type: 'input',
+            name: 'newText',
+            message: 'Edita el texto de la tarea:',
+            default: todo.text
+        }
+    ]);
+
+    if (newText && newText.trim() !== '' && newText !== todo.text) {
+        todos[index].text = newText;
+        saveTodos(todos);
+        console.log(chalk.green('Tarea actualizada.'));
+    } else {
+        console.log(chalk.yellow('No se realizaron cambios.'));
+    }
+    await new Promise(resolve => setTimeout(resolve, 1000));
+}
+
+/**
+ * Muestra un menú de acciones para una tarea seleccionada.
+ * @param {number} index
+ */
+async function promptTaskActions(index) {
+    const todos = loadTodos();
+    const todo = todos[index];
+
+    console.clear();
+    console.log(chalk.cyan.bold('--- TAREA SELECCIONADA ---'));
+    console.log(`Tarea: ${chalk.yellow(todo.text)}
+`);
+
+    const { action } = await inquirer.prompt([
         {
             type: 'list',
-            name: 'todoIndex',
-            message: '¿Qué tarea quieres eliminar?',
+            name: 'action',
+            message: '¿Qué quieres hacer con esta tarea?',
             choices: [
-                ...todos.map((todo, index) => ({ name: todo.text, value: index })),
+                { name: `Marcar como ${todo.completed ? 'pendiente' : 'completada'}`, value: 'toggle' },
+                { name: 'Editar', value: 'edit' },
+                { name: 'Eliminar', value: 'delete' },
                 new inquirer.Separator(),
-                { name: 'Cancelar', value: -1 }
+                { name: 'Volver al menú principal', value: 'back' }
             ]
         }
     ]);
 
-    if (todoIndex !== -1) {
-        todos.splice(todoIndex, 1);
-        saveTodos(todos);
+    const currentTodos = loadTodos();
+
+    switch (action) {
+        case 'toggle':
+            currentTodos[index].completed = !currentTodos[index].completed;
+            saveTodos(currentTodos);
+            break;
+        case 'edit':
+            await promptEditTodo(index);
+            break;
+        case 'delete':
+            currentTodos.splice(index, 1);
+            saveTodos(currentTodos);
+            console.log(chalk.green('Tarea eliminada.'));
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            break;
+        case 'back':
+            break;
+    }
+}
+
+
+/**
+ * Muestra el menú principal y gestiona las acciones del usuario.
+ */
+async function mainMenu() {
+    console.clear();
+    console.log(chalk.cyan.bold('--- GESTOR DE TAREAS ---'));
+
+    const todos = loadTodos();
+
+    const choices = [
+        { name: chalk.blue.bold('AÑADIR NUEVA TAREA'), value: 'add' },
+        new inquirer.Separator('─'.repeat(70)),
+    ];
+
+    if (todos.length > 0) {
+        todos.forEach((todo, index) => {
+            const status = todo.completed ? chalk.green('[✔]') : chalk.yellow('[ ]');
+            const taskText = todo.completed ? chalk.gray.strikethrough(todo.text) : chalk.white(todo.text);
+            choices.push({
+                name: `${chalk.cyan.bold((index + 1) + '.')} ${status} ${taskText}`,
+                value: { action: 'select_task', index: index }
+            });
+        });
+    } else {
+        choices.push({ name: chalk.gray('No hay tareas pendientes. ¡Añade una!'), disabled: true });
+    }
+
+    choices.push(new inquirer.Separator('─'.repeat(70)));
+    choices.push({ name: 'Salir', value: 'exit' });
+
+    const { selection } = await inquirer.prompt([
+        {
+            type: 'list',
+            name: 'selection',
+            message: 'Selecciona una opción o una tarea:',
+            choices: choices,
+            pageSize: 20,
+            loop: false
+        }
+    ]);
+
+    if (selection === 'add') {
+        await promptAddTodo();
+        mainMenu();
+    } else if (selection === 'exit') {
+        console.log(chalk.blue("¡Hasta luego!"));
+        process.exit(0);
+    } else if (selection && typeof selection === 'object' && selection.action === 'select_task') {
+        await promptTaskActions(selection.index);
+        mainMenu();
+    } else {
+        mainMenu();
     }
 }
 
