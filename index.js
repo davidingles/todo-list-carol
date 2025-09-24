@@ -16,10 +16,18 @@ function loadTodos() {
             const todos = JSON.parse(data);
             // Migrate old format tasks
             return todos.map(todo => {
-                if (typeof todo.text === 'string' && typeof todo.title === 'undefined') {
-                    return { title: todo.text, description: '', completed: todo.completed };
+                const newTodo = { ...todo };
+                if (typeof newTodo.text === 'string' && typeof newTodo.title === 'undefined') {
+                    newTodo.title = newTodo.text;
+                    delete newTodo.text;
                 }
-                return todo;
+                if (typeof newTodo.description === 'undefined') {
+                    newTodo.description = '';
+                }
+                if (typeof newTodo.state === 'undefined') {
+                    newTodo.state = '';
+                }
+                return newTodo;
             });
         }
     } catch (error) {
@@ -46,8 +54,8 @@ function displayTodos() {
     }
 
     const table = new Table({
-        head: [chalk.cyan.bold('#'), chalk.cyan.bold('Estado'), chalk.cyan.bold('Título')],
-        colWidths: [5, 10, 60],
+        head: [chalk.cyan.bold('#'), chalk.cyan.bold('Estado'), chalk.cyan.bold('Título'), chalk.cyan.bold('Nuevo Estado')],
+        colWidths: [5, 10, 40, 20],
         style: { 'head': [], 'border': ['grey'] }
     });
 
@@ -56,8 +64,9 @@ function displayTodos() {
     reversedTodos.forEach((todo, index) => {
         const status = chalk.magenta(todo.completed ? '[✔]' : '[ ]');
         const taskText = todo.completed ? chalk.gray.strikethrough(todo.title) : chalk.yellow(todo.title);
+        const stateText = chalk.greenBright(todo.state);
         const displayIndex = index + 2;
-        table.push([displayIndex, status, taskText]);
+        table.push([displayIndex, status, taskText, stateText]);
     });
 
     console.log(table.toString() + '\n');
@@ -72,8 +81,7 @@ async function promptEditField(index, fieldToEdit) {
         {
             type: 'input',
             name: 'newText',
-            message: `Edita el ${fieldToEdit}:
-`,
+            message: `Edita el ${fieldToEdit}:\n`,
             default: currentText
         }
     ]);
@@ -101,8 +109,9 @@ async function promptEditMenu(index) {
             choices: [
                 { name: '1. Editar Título', value: 'title' },
                 { name: '2. Editar Descripción', value: 'description' },
+                { name: '3. Editar "nuevo estado"', value: 'state' },
                 new inquirer.Separator(),
-                { name: '3. Volver', value: 'back' }
+                { name: '4. Volver', value: 'back' }
             ]
         }
     ]);
@@ -139,9 +148,10 @@ async function promptTaskActions(index) {
             choices: [
                 { name: `1. Marcar como ${todo.completed ? 'pendiente' : 'completada'}`, value: 'toggle' },
                 { name: '2. Editar', value: 'edit' },
-                { name: '3. Eliminar', value: 'delete' },
+                { name: '3. Añadir/Editar "nuevo estado"', value: 'state' },
+                { name: '4. Eliminar', value: 'delete' },
                 new inquirer.Separator(),
-                { name: '4. Volver', value: 'back' }
+                { name: '5. Volver', value: 'back' }
             ]
         }
     ]);
@@ -151,6 +161,8 @@ async function promptTaskActions(index) {
         saveTodos(todos);
     } else if (action === 'edit') {
         await promptEditMenu(index);
+    } else if (action === 'state') {
+        await promptEditField(index, 'state');
     } else if (action === 'delete') {
         todos.splice(index, 1);
         saveTodos(todos);
@@ -176,8 +188,9 @@ async function mainMenu() {
         todos.forEach((todo, index) => { // index is from the reversed array
             const status = chalk.magenta(todo.completed ? '[✔]' : '[ ]');
             const taskText = todo.completed ? chalk.gray.strikethrough(todo.title) : chalk.yellow(todo.title);
+            const stateText = chalk.greenBright(`(${todo.state})`);
             choices.push({
-                name: `${chalk.greenBright.bold((index + 2) + '.')} ${status} ${taskText}`,
+                name: `${chalk.greenBright.bold((index + 2) + '.')} ${status} ${taskText} ${stateText}`,
                 value: { action: 'select_task', index: (originalTodosCount - 1) - index }
             });
         });
@@ -200,20 +213,20 @@ async function mainMenu() {
     ]);
 
     if (selection === 'add') {
-        const { title } = await inquirer.prompt([{
+        const { title } = await inquirer.prompt([{ 
             type: 'input',
             name: 'title',
             message: 'Escribe el TÍTULO de la nueva tarea:',
         }]);
 
         if (title && title.trim() !== '') {
-            const { description } = await inquirer.prompt([{
+            const { description } = await inquirer.prompt([{ 
                 type: 'input',
                 name: 'description',
                 message: 'Añade una DESCRIPCIÓN a la tarea:',
             }]);
             const currentTodos = loadTodos();
-            currentTodos.push({ title: title.toUpperCase(), description: description || '', completed: false });
+            currentTodos.push({ title: title.toUpperCase(), description: description || '', completed: false, state: '' });
             saveTodos(currentTodos);
         }
         mainMenu();
